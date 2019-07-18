@@ -28,7 +28,8 @@ const utils = {
 }
 
 const scripts = [
-  'scripts/youtube-ambilight.js'
+  'scripts/youtube-ambilight.js',
+  'scripts/youtube-hide-teasers.js'
 ]
 scripts.forEach((path) => {
   const s = document.createElement('script')
