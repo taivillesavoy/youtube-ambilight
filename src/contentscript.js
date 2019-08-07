@@ -28,6 +28,7 @@ const utils = {
 }
 
 const scripts = [
+  chrome.extension.getURL('scripts/three.js'),
   chrome.extension.getURL('scripts/youtube-ambilight.js')
 ]
 scripts.forEach((path) => {

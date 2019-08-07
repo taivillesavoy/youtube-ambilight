@@ -98,6 +98,7 @@ raf = (requestAnimationFrame || webkitRequestAnimationFrame)
 ctxOptions = {
   desynchronized: false
 }
+const webglEnabled = false;
 
 const waitForDomElement = (check, containerSelector, callback) => {
   if (check()) {
@@ -132,7 +133,7 @@ class Ambilight {
     this.isOnVideoPage = true
     this.showedHighQualityCompareWarning = false
 
-    this.p = null;
+    this.p = { w: 256, h: 256 };
     this.a = null;
     this.isFullscreen = false
     this.isFillingFullscreen = false
@@ -462,14 +463,51 @@ class Ambilight {
     for (let i = this.players.length; i < spreadLevels; i++) {
       const canvas = $.create('canvas')
       canvas.class('ambilight__canvas')
-
-      const ctx = canvas.getContext('2d', ctxOptions)
       this.canvasList.prepend(canvas)
 
-      this.players.push({
-        elem: canvas,
-        ctx: ctx
-      })
+      if(!webglEnabled) {
+        const ctx = canvas.getContext('2d', ctxOptions)
+
+        this.players.push({
+          elem: canvas,
+          ctx: ctx
+        })
+      } else {
+
+        //webgl
+        var width = this.p.w;
+        var height = this.p.h;
+
+        var videoTexture = new THREE.VideoTexture(this.videoPlayer);
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+        videoTexture.format = THREE.RGBFormat;
+        
+        var movieMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
+        
+        var geometry = new THREE.PlaneGeometry(width, height, 1, 1);
+        var mesh = new THREE.Mesh(geometry, movieMaterial);
+        
+        var scene = new THREE.Scene();
+        scene.add(mesh);
+        
+        var camera = new THREE.OrthographicCamera(width / - 2, width / 2, height / 2, height / - 2, 1, 1000);
+        camera.position.z = 1;
+        
+        const ctx = canvas.getContext('webgl', ctxOptions)
+        var renderer = new THREE.WebGLRenderer({ context: ctx }); //canvas: document.querySelector('canvas')
+        renderer.setSize(width, height);
+
+        //end webgl
+
+        this.players.push({
+          elem: canvas,
+          ctx: ctx,
+          renderer: renderer,
+          camera: camera, 
+          scene: scene
+        })
+      }
     }
   }
 
@@ -561,7 +599,6 @@ class Ambilight {
         player.elem.width = this.p.w
       if (player.elem.height !== this.p.h)
         player.elem.height = this.p.h
-      player.ctx = player.elem.getContext('2d', ctxOptions)
     })
 
     this.buffer.elem.width = this.p.w
@@ -842,7 +879,9 @@ class Ambilight {
     }
 
     //performance.mark('start-drawing');
-    this.compareBuffer.ctx.drawImage(this.videoPlayer, 0, 0, this.compareBuffer.elem.width, this.compareBuffer.elem.height)
+    if(!webglEnabled) {
+      this.compareBuffer.ctx.drawImage(this.videoPlayer, 0, 0, this.compareBuffer.elem.width, this.compareBuffer.elem.height)
+    }
 
     if (
       this.highQuality &&
@@ -883,12 +922,18 @@ class Ambilight {
 
     this.videoFrameCount = newFrameCount
 
-    this.buffer.ctx.drawImage(this.compareBuffer.elem, 0, this.compareBufferBarsClipPx, this.compareBuffer.elem.width, this.compareBuffer.elem.height - (this.compareBufferBarsClipPx * 2), 0, 0, this.p.w, this.p.h)
+    if(!webglEnabled) {
+      this.buffer.ctx.drawImage(this.compareBuffer.elem, 0, this.compareBufferBarsClipPx, this.compareBuffer.elem.width, this.compareBuffer.elem.height - (this.compareBufferBarsClipPx * 2), 0, 0, this.p.w, this.p.h)
+    }
     //performance.mark('end-drawing');
     //performance.measure('drawing', 'start-drawing', 'end-drawing');
 
     this.players.forEach((player) => {
-      player.ctx.drawImage(this.buffer.elem, 0, 0)
+      if(!webglEnabled) {
+        player.ctx.drawImage(this.buffer.elem, 0, 0)
+      } else {
+        player.renderer.render(player.scene, player.camera);
+      }
     })
   }
 
@@ -1249,7 +1294,7 @@ const ambilightDetectDetachedVideo = () => {
 const ambilightDetectVideoPage = () => {
   const tryInitAmbilight = () => {
     const videoPlayer = $.s("#player-container video")
-    if (videoPlayer) {
+    if (videoPlayer && (!webglEnabled || window.THREE)) {
       window.ambilight = new Ambilight(videoPlayer)
       ambilightDetectDetachedVideo()
     }
