@@ -1002,6 +1002,7 @@ class Ambilight {
       if (this.scheduled || !this.enabled || this.videoPlayer.paused) return
 
       if(continueImmediately) {
+        //console.log('continueImmediately')
         this.nextFrame()
       } else {
         this.scheduleNextFrame()
@@ -1142,7 +1143,7 @@ class Ambilight {
     ) {
       if (!this.videoFrameRate || !this.displayFrameRate || this.videoFrameRate < (this.displayFrameRate)) {
         //performance.mark('comparing-compare-start')
-        if(this.compareMarkDurations.length > 1000) this.compareMarkDurations.splice(0, 500)
+        //if(this.compareMarkDurations.length > 1000) this.compareMarkDurations.splice(0, 500)
         //const startMark = performance.now()
         let newImage = []
         let isNewFrame = false
@@ -1150,6 +1151,9 @@ class Ambilight {
         try {
           for (let i = this.compareBufferPartSize; i < this.compareBuffer.elem.height; i += this.compareBufferPartSize) {
             //newImage.push(new Uint32Array(this.compareBuffer.ctx.getImageData(0, i, this.compareBuffer.elem.width, 1).data.buffer))
+            if(newFrameCount !== this.videoPlayer.webkitDecodedFrameCount + this.videoPlayer.webkitDroppedFrameCount) {
+              break
+            }
             newImage.push(this.compareBuffer.ctx.getImageData(0, i, this.compareBuffer.elem.width, 1).data)
           }
           const newFrameCountAfterGetImageData = this.videoPlayer.webkitDecodedFrameCount + this.videoPlayer.webkitDroppedFrameCount
@@ -1177,7 +1181,7 @@ class Ambilight {
           //console.log(newFrameCount, 'and same frame from compare')
           return
         } else {
-          //console.log(newFrameCount, '????? but new frame from compare')
+          //console.log(newFrameCount, 'new frame from compare')
           newFrameCount++
           this.oldImage = newImage
           newImage = undefined
