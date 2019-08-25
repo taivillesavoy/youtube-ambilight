@@ -444,6 +444,12 @@ class Ambilight {
         default: false
       },
       {
+        name: 'performanceMode',
+        label: 'Hide (performance mode) [C]',
+        type: 'checkbox',
+        default: false
+      },
+      {
         type: 'section',
         label: 'General'
       },
@@ -496,6 +502,7 @@ class Ambilight {
 
     this.highQuality = this.getSetting('highQuality', true)
     this.immersive = this.getSetting('immersive', true)
+    this.performanceMode = this.getSetting('performanceMode', true)
     this.enableInFullscreen = this.getSetting('enableInFullscreen', true)
     this.resetThemeToLightOnDisable = this.getSetting('resetThemeToLightOnDisable', true)
     this.showFPS = this.getSetting('showFPS')
@@ -535,7 +542,7 @@ class Ambilight {
     this.canvasList.class('ambilight__canvas-list')
     this.playerContainer.prepend(this.canvasList)
 
-    const bufferElem = document.createElement('canvas')
+    const bufferElem = new OffscreenCanvas(1, 1)
     const bufferCtx = bufferElem.getContext('2d', ctxOptions)
     this.buffer = {
       elem: bufferElem,
@@ -595,6 +602,8 @@ class Ambilight {
         setTimeout(() => this.checkVideoSize(), 0)
       if (e.keyCode === 90) // z
         this.toggleImmersiveMode()
+      if (e.keyCode === 67) // T
+        this.togglePerformanceMode()
       if (e.keyCode === 65) // a
         this.toggleEnabled()
     })
@@ -602,6 +611,7 @@ class Ambilight {
     this.initSettings()
     this.initScrollPosition()
     this.initImmersiveMode()
+    this.initPerformanceMode()
 
     setTimeout(() => {
       if (this.enabled)
@@ -957,6 +967,8 @@ class Ambilight {
     const fadeOutFrom = this.bloom / 100
     drawGradient(video.h, edge.h, keyframes, fadeOutFrom, darkest, false)
     drawGradient(video.w, edge.w, keyframes, fadeOutFrom, darkest, true)
+
+    this.compareBufferPartSize = Math.ceil(this.compareBuffer.elem.height / 3)
   }
 
   checkVideoSize() {
@@ -983,11 +995,17 @@ class Ambilight {
   nextFrame = () => {
     try {
       this.scheduled = false
+      let continueImmediately = false
       if (this.checkVideoSize())
-        this.drawAmbilight()
+        continueImmediately = this.drawAmbilight()
 
       if (this.scheduled || !this.enabled || this.videoPlayer.paused) return
-      this.scheduleNextFrame()
+
+      if(continueImmediately) {
+        this.nextFrame()
+      } else {
+        this.scheduleNextFrame()
+      }
     } catch (ex) {
       console.error('YouTube Ambilight | NextFrame:', ex)
       AmbilightSentry.captureExceptionWithDetails(ex)
@@ -1003,25 +1021,24 @@ class Ambilight {
 
   isNewFrame(oldImage, newImage) {
     if (!oldImage || oldImage.length !== newImage.length) {
-      oldImage = null
-      newImage = null
+      oldImage = undefined
+      newImage = undefined
       return true
     }
 
-    for (let i = 0; i < oldImage.length; i++) {
-      for (let xi = 0; xi < oldImage[i].length; xi++) {
-        if (oldImage[i][xi] !== newImage[i][xi]) {
-          oldImage = null
-          newImage = null
-          i = null
-          xi = null
+      for (let i = 0; i < oldImage.length; i++) {
+        for (let xi = 0; xi < oldImage[i].length; xi++) {
+          if (oldImage[i][xi] === newImage[i][xi]) continue;
+          oldImage = undefined
+          newImage = undefined
+          i = undefined
+          xi = undefined
           return true
         }
       }
-    }
 
-    oldImage = null
-    newImage = null
+    oldImage = undefined
+    newImage = undefined
     return false
   }
 
@@ -1074,6 +1091,9 @@ class Ambilight {
     }
   }
 
+  compareMarkDurations = []
+
+  //Returns if drawing the next frame should be done immediately
   drawAmbilight() {
     if (!this.enabled) return
 
@@ -1093,7 +1113,7 @@ class Ambilight {
     this.detectVideoFrameRate()
     this.detectDisplayFrameRate()
 
-    const newFrameCount = this.videoPlayer.webkitDecodedFrameCount + this.videoPlayer.webkitDroppedFrameCount
+    let newFrameCount = this.videoPlayer.webkitDecodedFrameCount + this.videoPlayer.webkitDroppedFrameCount
     if (this.videoFrameCount == newFrameCount) {
       this.skippedFrames = 0
       if (!this.highQuality) return
@@ -1109,23 +1129,31 @@ class Ambilight {
 
     //performance.mark('start-drawing')
     this.compareBuffer.ctx.drawImage(this.videoPlayer, 0, 0, this.compareBuffer.elem.width, this.compareBuffer.elem.height)
+    let setOldImageAfterDraw = false
 
+    // if(this.videoFrameCount !== newFrameCount) {
+    //   console.log(newFrameCount, 'new frame from count')
+    // } else {
+    //   //console.log(newFrameCount, 'same frame from count')
+    // }
     if (
       this.highQuality &&
       this.videoFrameCount === newFrameCount
     ) {
       if (!this.videoFrameRate || !this.displayFrameRate || this.videoFrameRate < (this.displayFrameRate)) {
         //performance.mark('comparing-compare-start')
+        if(this.compareMarkDurations.length > 1000) this.compareMarkDurations.splice(0, 500)
+        //const startMark = performance.now()
         let newImage = []
-
-        let partSize = Math.ceil(this.compareBuffer.elem.height / 3)
         let isNewFrame = false
 
         try {
-          for (let i = partSize; i < this.compareBuffer.elem.height; i += partSize) {
+          for (let i = this.compareBufferPartSize; i < this.compareBuffer.elem.height; i += this.compareBufferPartSize) {
+            //newImage.push(new Uint32Array(this.compareBuffer.ctx.getImageData(0, i, this.compareBuffer.elem.width, 1).data.buffer))
             newImage.push(this.compareBuffer.ctx.getImageData(0, i, this.compareBuffer.elem.width, 1).data)
           }
-          isNewFrame = this.isNewFrame(this.oldImage, newImage)
+          const newFrameCountAfterGetImageData = this.videoPlayer.webkitDecodedFrameCount + this.videoPlayer.webkitDroppedFrameCount
+          isNewFrame = (newFrameCount !== newFrameCountAfterGetImageData) || this.isNewFrame(this.oldImage, newImage)
           //performance.mark('comparing-compare-end')
         } catch (ex) {
           if (!this.showedHighQualityCompareWarning) {
@@ -1134,21 +1162,34 @@ class Ambilight {
             this.showedHighQualityCompareWarning = true
           }
         }
-
-        if (!isNewFrame) {
-          newImage = null
-          this.videoFrameCount++
+        
+        const newFrameCountAfterCompare = this.videoPlayer.webkitDecodedFrameCount + this.videoPlayer.webkitDroppedFrameCount
+        if(newFrameCount !== newFrameCountAfterCompare) {
+          //console.log(newFrameCount, '!!!!! compare took so long framecount changed')
+          newFrameCount = newFrameCountAfterCompare
+          setOldImageAfterDraw = true
+          this.compareBuffer.ctx.drawImage(this.videoPlayer, 0, 0, this.compareBuffer.elem.width, this.compareBuffer.elem.height)
+          // if(newFrameCount !== this.videoPlayer.webkitDecodedFrameCount + this.videoPlayer.webkitDroppedFrameCount) {
+          //   console.log(newFrameCount, '!!!!!!!!!! filling buffer took so long the framecount changed again')
+          // }
+        } else if(!isNewFrame) {
+          newImage = undefined
+          //console.log(newFrameCount, 'and same frame from compare')
           return
+        } else {
+          //console.log(newFrameCount, '????? but new frame from compare')
+          newFrameCount++
+          this.oldImage = newImage
+          newImage = undefined
         }
 
         //performance.measure('comparing-compare', 'comparing-compare-start', 'comparing-compare-end')
-
-        this.oldImage = newImage
-        newImage = null
+        
+        //this.compareMarkDurations.push(performance.now() - startMark)
+        //console.log(this.compareMarkDurations.reduce((prev, current) => prev + current) / this.compareMarkDurations.length)
       }
     }
 
-    this.videoFrameCount = newFrameCount
 
     this.buffer.ctx.drawImage(this.compareBuffer.elem, 0, this.compareBufferBarsClipPx, this.compareBuffer.elem.width, this.compareBuffer.elem.height - (this.compareBufferBarsClipPx * 2), 0, 0, this.p.w, this.p.h)
     //performance.mark('end-drawing')
@@ -1158,7 +1199,20 @@ class Ambilight {
       player.ctx.drawImage(this.buffer.elem, 0, 0)
     })
 
+    if(this.highQuality && setOldImageAfterDraw) {
+      //console.log('set old image after draw')
+      this.oldImage = []
+      for (let i = this.compareBufferPartSize; i < this.compareBuffer.elem.height; i += this.compareBufferPartSize) {
+        this.oldImage.push(this.compareBuffer.ctx.getImageData(0, i, this.compareBuffer.elem.width, 1).data)
+      }
+    }
+
+    this.videoFrameCount = newFrameCount
     this.ambilightFrameCount++
+    if(this.videoFrameCount !== this.videoPlayer.webkitDecodedFrameCount + this.videoPlayer.webkitDroppedFrameCount) {
+      //console.log('already new before finishing drawAmbilight()')
+      return true
+    }
   }
 
   enable(initial = false) {
@@ -1332,6 +1386,20 @@ class Ambilight {
   }
 
 
+  initPerformanceMode() {
+    if (this.performanceMode)
+      body.class('performance-mode')
+  }
+
+  togglePerformanceMode() {
+    body.classList.toggle('performance-mode')
+    const enabled = body.classList.contains('performance-mode')
+    $.s(`#setting-performanceMode`).attr('aria-checked', enabled ? 'true' : 'false')
+    this.setSetting('performanceMode', enabled)
+    window.dispatchEvent(new Event('resize'))
+  }
+
+
   initSettings() {
     const button = $.create('button')
       .class('ytp-button ytp-ambilight-settings-button')
@@ -1433,6 +1501,9 @@ class Ambilight {
 
           if (setting.name === 'immersive') {
             this.toggleImmersiveMode()
+          }
+          if(setting.name === 'performance-mode') {
+            this.togglePerformanceMode()
           }
           if (setting.name === 'enabled') {
             if (setting.value)
