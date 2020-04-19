@@ -1989,7 +1989,7 @@ class Ambilight {
       })
     }
 
-    if(!this.seeking && this.ambilightFrameCounter.visible) //Only used when the framerate is visible
+    if(!this.seeking) //Only used when the framerate is visible
       this.ambilightFrameCounter.update()
 
     this.buffersCleared = false
@@ -2082,17 +2082,30 @@ class Ambilight {
   }
 
   updateVideoOverlayVisibility() {
-    const frameRate = Math.max(this.videoFrameCounter.rate, 0.99)
-    const timespan = 2 //seconds
-    const fromTime = performance.now() - (timespan * 1000)
-    const skippedInTimespan = this.skippedFramesLastTimes
-      .slice(Math.max(0, this.skippedFramesLastTimes.length - Math.ceil(frameRate * timespan)))
-      .filter(skippedFrameTime => skippedFrameTime > fromTime)
-      .length
-
     const failureThreshold = (this.videoOverlaySyncThreshold / 100)
-    const failureRate = skippedInTimespan / (frameRate * timespan)
-    const aboveThreshold = failureRate > failureThreshold
+    const frameRate = Math.max(this.videoFrameCounter.rate, 0.99)
+    const frameTime = (1 / frameRate) * 1000 //ms
+
+    const frameTimeThreshold = frameTime * (1.5 + failureThreshold)
+    const frameTimesFailed = this.ambilightFrameCounter.durations.filter(item => item.duration > frameTimeThreshold)
+    const frameTimeFailureRate = frameTimesFailed.length / this.ambilightFrameCounter.durations.length
+    if(frameTimesFailed.length) {
+      console.log(frameTimeThreshold)
+      console.log(frameTimesFailed)
+    }
+    let aboveThreshold = frameTimeFailureRate / failureThreshold
+    
+    if(!aboveThreshold) {
+      const timespan = 2 //seconds
+      const fromTime = performance.now() - (timespan * 1000)
+      const skippedInTimespan = this.skippedFramesLastTimes
+        .slice(Math.max(0, this.skippedFramesLastTimes.length - Math.ceil(frameRate * timespan)))
+        .filter(skippedFrameTime => skippedFrameTime > fromTime)
+        .length
+
+      const failureRate = skippedInTimespan / (frameRate * timespan)
+      aboveThreshold = failureRate > failureThreshold
+    }
 
     const mayShow = (performance.now() - this.videoOverlay.hiddenTimestamp) > 2000
 
