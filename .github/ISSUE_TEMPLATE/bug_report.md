@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Create a bug report
 title: A short title describing the bug
 labels: 'S: Todo, T: Bug'
 assignees: WesselKroos
