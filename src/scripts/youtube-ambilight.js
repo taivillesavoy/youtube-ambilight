@@ -843,31 +843,19 @@ class Ambilight {
   }
 
   recreateProjectors() {
-    const spreadLevels = Math.max(2, Math.round((this.spread / this.edge)) + this.innerStrength + 1)
+    this.spreadLevels = Math.max(2, Math.round((this.spread / this.edge)) + this.innerStrength + 1)
 
-    if (!this.projectors) {
-      this.projectors = []
-    }
+    if (this.projectors) return;
 
-    this.projectors = this.projectors.filter((projector, i) => {
-      if (i >= spreadLevels) {
-        projector.elem.remove()
-        return false
-      }
-      return true
-    })
+    const projectorElem = $.create('canvas')
+    projectorElem.class('ambilight__projector')
 
-    for (let i = this.projectors.length; i < spreadLevels; i++) {
-      const projectorElem = $.create('canvas')
-      projectorElem.class('ambilight__projector')
+    const projectorCtx = projectorElem.getContext('2d', ctxOptions)
+    this.projectorListElem.prepend(projectorElem)
 
-      const projectorCtx = projectorElem.getContext('2d', ctxOptions)
-      this.projectorListElem.prepend(projectorElem)
-
-      this.projectors.push({
-        elem: projectorElem,
-        ctx: projectorCtx
-      })
+    this.projectors = {
+      elem: projectorElem,
+      ctx: projectorCtx
     }
   }
 
@@ -877,10 +865,9 @@ class Ambilight {
 
   clear() {
     ambilightSetVideoInfo()
-    this.projectors.forEach((projector) => {
-      projector.ctx.fillStyle = '#000'
-      projector.ctx.fillRect(0, 0, projector.elem.width, projector.elem.height)
-    })
+    const projector = this.projectors
+    projector.ctx.fillStyle = '#000'
+    projector.ctx.fillRect(0, 0, projector.elem.width, projector.elem.height)
   }
 
   detectVideoFillScale() {
@@ -1086,19 +1073,19 @@ class Ambilight {
         this.videoShadowElem.style.display = ''
       }
 
-      this.filterElem.style.webkitFilter = `
-        blur(${this.projectorOffset.height * (this.blur * .0025)}px)
-        ${(this.contrast !== 100) ? `contrast(${this.contrast}%)` : ''}
-        ${(this.brightness !== 100) ? `brightness(${this.brightness}%)` : ''}
-        ${(this.saturation !== 100) ? `saturate(${this.saturation}%)` : ''}
-      `
+      // this.filterElem.style.webkitFilter = `
+      //   /*blur(${this.projectorOffset.height * (this.blur * .0025)}px) */
+      //   ${(this.contrast !== 100) ? `contrast(${this.contrast}%)` : ''}
+      //   ${(this.brightness !== 100) ? `brightness(${this.brightness}%)` : ''}
+      //   ${(this.saturation !== 100) ? `saturate(${this.saturation}%)` : ''}
+      // `
 
-      this.projectors.forEach((projector) => {
-        if (projector.elem.width !== this.p.w)
-          projector.elem.width = this.p.w
-        if (projector.elem.height !== this.p.h)
-          projector.elem.height = this.p.h
-      })
+      const projector = this.projectors
+      if (projector.elem.width !== this.p.w)
+        projector.elem.width = this.p.w
+      if (projector.elem.height !== this.p.h)
+        projector.elem.height = this.p.h
+      projector.ctx.filter = `blur(${this.projectorOffset.height * (this.blur * .0025)}px)`
 
       this.projectorBuffer.elem.width = this.p.w
       this.projectorBuffer.elem.height = this.p.h
@@ -1246,27 +1233,27 @@ class Ambilight {
 
     const scaleStep = this.edge / 100
 
-    this.projectors.forEach((projector, i) => {
-      const pos = i - this.innerStrength
-      let scaleX = 1
-      let scaleY = 1
+    const projector = this.projectors
+    const pos = this.spreadLevels - this.innerStrength
+    let scaleX = 1
+    let scaleY = 1
 
-      if (pos > 0) {
-        scaleX = 1 + ((scaleStep * ratio.x) * pos)
-        scaleY = 1 + ((scaleStep * ratio.y) * pos)
-      }
+    if (pos > 0) {
+      scaleX = 1 + ((scaleStep * ratio.x) * pos)
+      scaleY = 1 + ((scaleStep * ratio.y) * pos)
+    }
 
-      if (pos < 0) {
-        scaleX = 1 - ((scaleStep * ratio.x) * -pos)
-        scaleY = 1 - ((scaleStep * ratio.y) * -pos)
-        if (scaleX < 0) scaleX = 0
-        if (scaleY < 0) scaleY = 0
-      }
-      lastScale.x = scaleX
-      lastScale.y = scaleY
-      
-      projector.elem.style.transform = `scale(${Math.max(minScale.x, scaleX)}, ${Math.max(minScale.y, scaleY)})`
-    })
+    if (pos < 0) {
+      scaleX = 1 - ((scaleStep * ratio.x) * -pos)
+      scaleY = 1 - ((scaleStep * ratio.y) * -pos)
+      if (scaleX < 0) scaleX = 0
+      if (scaleY < 0) scaleY = 0
+    }
+    lastScale.x = scaleX
+    lastScale.y = scaleY
+    
+    projector.elem.style.transform = `scale(${Math.max(minScale.x, scaleX)}, ${Math.max(minScale.y, scaleY)})`
+  
 
     this.shadow.elem.style.transform = `scale(${lastScale.x + 0.01}, ${lastScale.y + 0.01})`
     this.shadow.ctx.clearRect(0, 0, this.shadow.elem.width, this.shadow.elem.height)
@@ -1885,9 +1872,10 @@ class Ambilight {
       this.blendedProjectorBuffer.ctx.globalAlpha = alpha
       this.blendedProjectorBuffer.ctx.drawImage(this.projectorBuffer.elem, 0, 0)
       this.blendedProjectorBuffer.ctx.globalAlpha = 1
-      this.projectors.forEach((projector) => {
+      const projector = this.projectors
+      for(let i = 0; i < this.spreadLevels; i++) {
         projector.ctx.drawImage(this.blendedProjectorBuffer.elem, 0, 0)
-      })
+      }
       this.previousDrawTime = drawTime
     } else {
       if (!hasNewFrame) return
@@ -1905,9 +1893,10 @@ class Ambilight {
         this.videoSnapshotBuffer.elem.height - (this.videoSnapshotBufferBarsClipPx * 2), 
         0, 0, this.projectorBuffer.elem.width, this.projectorBuffer.elem.height)
 
-      this.projectors.forEach((projector) => {
+      const projector = this.projectors
+      for(let i = 0; i < this.spreadLevels; i++) {
         projector.ctx.drawImage(this.projectorBuffer.elem, 0, 0)
-      })
+      }
     }
 
     this.ambilightFrameCount++
