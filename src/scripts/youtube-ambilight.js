@@ -190,6 +190,10 @@ class Ambilight {
     this.videoShadowElem.class('ambilight__video-shadow')
     this.elem.prepend(this.videoShadowElem)
 
+    this.blurFilterElem = document.createElement("div")
+    this.blurFilterElem.class('ambilight__blur-filter')
+    this.elem.prepend(this.blurFilterElem)
+
     this.filterElem = document.createElement("div")
     this.filterElem.class('ambilight__filter')
     this.elem.prepend(this.filterElem)
@@ -1078,7 +1082,6 @@ class Ambilight {
         this.videoShadowElem.style.width = `${unscaledWidth}px`
         this.videoShadowElem.style.height = `${(unscaledHeight * this.horizontalBarsClipScaleY)}px`
         this.videoShadowElem.style.transform = `
-          translate3d(0,0,0) 
           translateY(${(unscaledHeight * horizontalBarsClip)}px) 
           scale(${(this.videoScale / 100)})
         `
@@ -1086,11 +1089,14 @@ class Ambilight {
         this.videoShadowElem.style.display = ''
       }
 
+      const supportsBackdropFilter = false //CSS.supports('backdrop-filter', 'blur(1px)')
+      const blur = (this.blur != 0) ? `blur(${this.projectorOffset.height * (this.blur * .0025)}px)` : ''
+      this.blurFilterElem.style.backdropFilter = (supportsBackdropFilter) ? blur : ''
       this.filterElem.style.filter = `
-        ${(this.blur != 0) ? `blur(${this.projectorOffset.height * (this.blur * .0025)}px)` : ''}
         ${(this.contrast != 100) ? `contrast(${this.contrast}%)` : ''}
         ${(this.brightness != 100) ? `brightness(${this.brightness}%)` : ''}
         ${(this.saturation != 100) ? `saturate(${this.saturation}%)` : ''}
+        ${(supportsBackdropFilter) ? '' : blur}
       `
 
       this.projectors.forEach((projector) => {
