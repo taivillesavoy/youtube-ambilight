@@ -1016,7 +1016,7 @@ class Ambilight {
         playerElem.classList.contains('ytp-player-minimized') ||
         (this.isFullscreen && !this.enableInFullscreen)
       )
-      if (notVisible || noClipOrScale) {
+      if (notVisible) {
         if (videoElemParentElem) {
           videoElemParentElem.style.transform = ''
           videoElemParentElem.style.overflow = ''
