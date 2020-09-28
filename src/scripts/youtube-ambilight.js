@@ -1041,13 +1041,14 @@ class Ambilight {
       }
 
       const horizontalBarsClip = this.horizontalBarsClipPercentage / 100
-      if (!noClipOrScale) {
+      //if (!noClipOrScale) {
         const top = Math.max(0, parseInt(this.videoElem.style.top))
         videoElemParentElem.style.height = `${this.videoElem.offsetHeight}px`
         videoElemParentElem.style.marginBottom = `${-this.videoElem.offsetHeight}px`
         videoElemParentElem.style.overflow = 'hidden'
 
         this.horizontalBarsClipScaleY = (1 - (horizontalBarsClip * 2))
+        this.horizontalBarsClipScaleY = (this.horizontalBarsClipScaleY === 1) ? 0.999999 : this.horizontalBarsClipScaleY
         videoElemParentElem.style.transform =  `
           translateY(${top}px) 
           scale(${(this.videoScale / 100)}) 
@@ -1057,7 +1058,7 @@ class Ambilight {
           translateY(${-top}px) 
           scaleY(${(Math.round(1000 * (1 / this.horizontalBarsClipScaleY)) / 1000)})
         `)
-      }
+      //}
 
       this.projectorOffset = this.videoElem.offset()
       if (
