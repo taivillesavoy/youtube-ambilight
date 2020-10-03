@@ -125,6 +125,7 @@ class Ambilight {
     this.videoElem
       .on('playing', () => {
         this.initGetImageDataAllowed()
+        this.videoElem.setAttribute('crossOrigin', 'anonymous')
         this.start()
         this.resetSettingsIfNeeded()
       })
